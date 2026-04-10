@@ -1,0 +1,803 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Estruturação de Atendimento de WhatsApp</title>
+<link href="https://fonts.googleapis.com/css2?family=Sora:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<style>
+:root{
+  --navy:#0B1B3A;--navy-mid:#0f2040;--navy-card:#162444;--navy-light:#1A2E55;
+  --accent:#00C4A0;--accent-dim:#00a589;--accent-glow:rgba(0,196,160,0.15);
+  --wa:#25D366;--wa-dim:rgba(37,211,102,0.12);
+  --white:#fff;--off:#c8d8f0;--muted:#6a85aa;--border:rgba(255,255,255,0.08);
+  --danger:#ff5a5a;--r:12px;--r-sm:8px;
+}
+*{box-sizing:border-box;margin:0;padding:0;}
+html,body{width:100%;height:100%;overflow:hidden;font-family:'Sora',sans-serif;background:var(--navy);color:var(--white);user-select:none;}
+
+/* ── TOOLBAR ── */
+#toolbar{
+  position:fixed;top:0;left:0;right:0;height:52px;
+  background:var(--navy-mid);border-bottom:1px solid var(--border);
+  display:flex;align-items:center;gap:6px;padding:0 14px;z-index:1000;
+}
+.tb-title{font-size:13px;font-weight:700;color:var(--white);margin-right:4px;white-space:nowrap;}
+.tb-sep{width:1px;height:22px;background:var(--border);margin:0 3px;flex-shrink:0;}
+
+/* Tool group — rounded pill cluster */
+.tool-group{display:flex;gap:0;background:rgba(255,255,255,0.05);border:1px solid var(--border);border-radius:9px;overflow:hidden;flex-shrink:0;}
+.tool-btn{
+  display:flex;align-items:center;justify-content:center;gap:5px;
+  background:transparent;border:none;border-right:1px solid var(--border);
+  color:var(--muted);font-family:'Sora',sans-serif;font-size:11px;font-weight:500;
+  padding:6px 11px;cursor:pointer;transition:all .15s;white-space:nowrap;
+  position:relative;
+}
+.tool-btn:last-child{border-right:none;}
+.tool-btn:hover{background:rgba(255,255,255,0.07);color:var(--white);}
+.tool-btn.active{background:var(--accent);color:var(--navy);font-weight:700;}
+.tool-btn svg{width:14px;height:14px;flex-shrink:0;}
+
+/* tooltip */
+.tool-btn[data-tip]:hover::after{
+  content:attr(data-tip);
+  position:absolute;top:calc(100% + 8px);left:50%;transform:translateX(-50%);
+  background:rgba(11,27,58,0.95);color:var(--off);font-size:10px;
+  padding:4px 10px;border-radius:6px;white-space:nowrap;pointer-events:none;
+  border:1px solid var(--border);z-index:9999;
+}
+
+.tb-btn{
+  display:flex;align-items:center;gap:5px;background:transparent;
+  border:1px solid var(--border);border-radius:var(--r-sm);color:var(--off);
+  font-family:'Sora',sans-serif;font-size:11px;font-weight:500;
+  padding:5px 10px;cursor:pointer;transition:all .15s;white-space:nowrap;flex-shrink:0;
+}
+.tb-btn:hover{background:var(--navy-light);color:var(--white);border-color:rgba(255,255,255,0.18);}
+.tb-btn.primary{background:var(--accent);color:var(--navy);border-color:transparent;font-weight:700;}
+.tb-btn.primary:hover{background:var(--accent-dim);}
+.tb-btn svg{width:12px;height:12px;flex-shrink:0;}
+
+/* ── STATUS BAR ── */
+#status-bar{
+  position:fixed;bottom:0;left:0;right:0;height:28px;
+  background:var(--navy-mid);border-top:1px solid var(--border);
+  display:flex;align-items:center;gap:16px;padding:0 14px;z-index:1000;
+}
+.sb-item{font-size:10px;color:var(--muted);display:flex;align-items:center;gap:5px;}
+.sb-item strong{color:var(--off);font-weight:600;}
+.sb-mode{
+  display:flex;align-items:center;gap:5px;font-size:10px;font-weight:600;
+  color:var(--accent);margin-left:auto;
+}
+.sb-mode svg{width:11px;height:11px;}
+
+/* ── NOTIFY BANNER ── */
+#banner{
+  display:none;position:fixed;top:60px;left:50%;transform:translateX(-50%);
+  padding:7px 20px;border-radius:20px;z-index:1001;pointer-events:none;
+  font-size:12px;font-weight:700;white-space:nowrap;
+}
+#banner.acc{background:var(--accent);color:var(--navy);}
+#banner.warn{background:#E67E22;color:#fff;}
+#banner.danger{background:var(--danger);color:#fff;}
+
+/* ── CANVAS ── */
+#wrap{position:fixed;inset:52px 0 28px 0;overflow:hidden;}
+#svg-l{position:absolute;top:0;left:0;width:6000px;height:5000px;overflow:visible;}
+#nodes-l{position:absolute;top:0;left:0;width:6000px;height:5000px;}
+
+/* dot grid bg */
+#wrap::before{
+  content:'';position:absolute;inset:0;
+  background-image:radial-gradient(rgba(255,255,255,0.045) 1px,transparent 1px);
+  background-size:26px 26px;pointer-events:none;z-index:0;
+}
+
+/* ── CARD ── */
+.card{
+  position:absolute;background:var(--navy-card);
+  border:1.5px solid var(--border);border-radius:var(--r);
+  width:236px;box-shadow:0 6px 28px rgba(0,0,0,0.4);
+  transition:box-shadow .15s,border-color .15s;
+}
+.card.sel{border-color:var(--accent)!important;box-shadow:0 0 0 3px var(--accent-glow),0 6px 28px rgba(0,0,0,0.4);}
+.card.conn-src{border-color:var(--accent)!important;box-shadow:0 0 0 5px rgba(0,196,160,0.25);}
+.card.conn-hover{border-color:var(--wa)!important;box-shadow:0 0 0 5px rgba(37,211,102,0.2);}
+
+.card-head{
+  display:flex;align-items:center;gap:7px;
+  padding:9px 11px 8px;border-bottom:1px solid var(--border);
+  background:rgba(0,0,0,0.18);border-radius:var(--r) var(--r) 0 0;
+}
+.c-dot{width:9px;height:9px;border-radius:50%;flex-shrink:0;}
+.c-name{font-size:12px;font-weight:700;color:var(--white);flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.c-btns{display:flex;gap:3px;}
+.c-btn{background:transparent;border:none;color:var(--muted);cursor:pointer;padding:2px 3px;border-radius:4px;display:flex;transition:color .15s;}
+.c-btn:hover{color:var(--white);}
+.c-btn.del:hover{color:var(--danger);}
+.c-btn svg{width:11px;height:11px;}
+
+.card-body{padding:9px 11px 11px;}
+.wa-row{display:flex;align-items:center;gap:5px;margin-bottom:7px;}
+.wa-badge{display:flex;align-items:center;gap:3px;background:var(--wa-dim);border:1px solid rgba(37,211,102,0.2);border-radius:5px;padding:3px 7px;font-size:9px;font-weight:700;color:var(--wa);flex-shrink:0;}
+.wa-badge svg{width:9px;height:9px;}
+.wa-num{font-size:10px;color:var(--off);font-weight:500;}
+.wa-empty{font-size:10px;color:var(--muted);font-style:italic;}
+
+.ppl-list{display:flex;flex-direction:column;gap:3px;}
+.ppl-item{display:flex;align-items:center;gap:5px;background:rgba(255,255,255,0.03);border-radius:5px;padding:3px 6px;}
+.ppl-av{width:18px;height:18px;border-radius:50%;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:7px;font-weight:800;color:var(--navy);}
+.ppl-info{flex:1;min-width:0;}
+.ppl-name{font-size:9px;font-weight:700;color:var(--off);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.ppl-role{font-size:8px;color:var(--muted);}
+.ppl-wa{font-size:8px;color:var(--wa);}
+.ppl-empty{font-size:9px;color:var(--muted);font-style:italic;text-align:center;padding:4px 0;}
+
+/* ports — only visible in connect mode */
+.port{position:absolute;width:13px;height:13px;border-radius:50%;background:var(--navy-light);border:2.5px solid var(--accent);cursor:crosshair;z-index:10;opacity:0;transition:opacity .15s,transform .15s;}
+.port:hover{transform:scale(1.3);}
+.port.t{top:-7px;left:50%;transform:translateX(-50%);}
+.port.t:hover{transform:translateX(-50%) scale(1.3);}
+.port.b{bottom:-7px;left:50%;transform:translateX(-50%);}
+.port.b:hover{transform:translateX(-50%) scale(1.3);}
+.port.l{left:-7px;top:50%;transform:translateY(-50%);}
+.port.l:hover{transform:translateY(-50%) scale(1.3);}
+.port.r{right:-7px;top:50%;transform:translateY(-50%);}
+.port.r:hover{transform:translateY(-50%) scale(1.3);}
+body.mode-connect .port{opacity:1;}
+
+/* ── CONNECTION DELETE BUTTON ── */
+.conn-del-btn{
+  position:absolute;
+  width:22px;height:22px;border-radius:50%;
+  background:var(--danger);border:2px solid var(--navy-mid);
+  color:#fff;font-size:14px;line-height:1;
+  display:flex;align-items:center;justify-content:center;
+  cursor:pointer;z-index:50;
+  transform:translate(-50%,-50%);
+  box-shadow:0 2px 8px rgba(0,0,0,0.4);
+  transition:transform .15s,background .15s;
+  pointer-events:all;
+}
+.conn-del-btn:hover{transform:translate(-50%,-50%) scale(1.2);background:#cc3333;}
+
+/* ── MODAL ── */
+#ov{display:none;position:fixed;inset:0;background:rgba(0,0,0,0.6);z-index:2000;align-items:center;justify-content:center;}
+#ov.open{display:flex;}
+#modal{background:var(--navy-card);border:1px solid rgba(255,255,255,0.12);border-radius:14px;width:460px;max-width:96vw;max-height:88vh;display:flex;flex-direction:column;box-shadow:0 20px 60px rgba(0,0,0,0.6);}
+.mh{display:flex;align-items:center;gap:10px;padding:14px 18px;border-bottom:1px solid var(--border);}
+.mh-dot{width:13px;height:13px;border-radius:50%;flex-shrink:0;}
+.mh-title{font-size:14px;font-weight:700;flex:1;}
+.mh-close{background:transparent;border:none;color:var(--muted);cursor:pointer;padding:4px;border-radius:6px;}
+.mh-close:hover{color:var(--white);}
+.mh-close svg{width:15px;height:15px;}
+.mb{padding:16px 18px;overflow-y:auto;flex:1;}
+.mf{padding:12px 18px;border-top:1px solid var(--border);display:flex;gap:8px;justify-content:flex-end;}
+
+.fl{font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--accent);margin-bottom:4px;}
+.fl.mu{color:var(--muted);}
+.mi{width:100%;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.1);border-radius:var(--r-sm);color:var(--white);font-family:'Sora',sans-serif;font-size:12px;padding:8px 11px;outline:none;margin-bottom:12px;transition:border-color .2s;}
+.mi:focus{border-color:var(--accent);}
+.mi::placeholder{color:var(--muted);}
+
+.cp{display:flex;gap:7px;flex-wrap:wrap;margin-bottom:14px;}
+.cs{width:22px;height:22px;border-radius:50%;cursor:pointer;border:2.5px solid transparent;transition:transform .15s,border-color .15s;}
+.cs:hover{transform:scale(1.2);}
+.cs.on{border-color:var(--white);}
+
+.pe{display:flex;flex-direction:column;gap:6px;margin-bottom:8px;}
+.pr{display:grid;grid-template-columns:1fr 1fr 1fr 26px;gap:5px;align-items:center;}
+.pr .mi{margin-bottom:0;font-size:11px;padding:6px 9px;}
+.rp-btn{background:transparent;border:1px solid rgba(255,90,90,0.2);border-radius:6px;color:var(--danger);cursor:pointer;width:26px;height:34px;display:flex;align-items:center;justify-content:center;transition:all .15s;}
+.rp-btn:hover{background:rgba(255,90,90,0.1);}
+.rp-btn svg{width:11px;height:11px;}
+.ap-btn{display:flex;align-items:center;gap:6px;background:transparent;border:1px dashed rgba(0,196,160,0.3);border-radius:var(--r-sm);color:var(--accent);font-family:'Sora',sans-serif;font-size:11px;font-weight:600;padding:7px 12px;cursor:pointer;width:100%;transition:all .15s;}
+.ap-btn:hover{background:var(--accent-glow);border-color:var(--accent);}
+.ap-btn svg{width:12px;height:12px;}
+
+.btn-s{background:var(--accent);color:var(--navy);border:none;border-radius:var(--r-sm);padding:8px 20px;font-family:'Sora',sans-serif;font-size:12px;font-weight:700;cursor:pointer;}
+.btn-s:hover{background:var(--accent-dim);}
+.btn-c{background:transparent;color:var(--muted);border:1px solid var(--border);border-radius:var(--r-sm);padding:8px 14px;font-family:'Sora',sans-serif;font-size:12px;cursor:pointer;}
+.btn-c:hover{color:var(--white);}
+
+/* ── ZOOM BADGE ── */
+#zoom-badge{position:fixed;bottom:38px;right:14px;background:var(--navy-mid);border:1px solid var(--border);border-radius:6px;font-size:10px;color:var(--muted);padding:3px 8px;z-index:900;pointer-events:none;}
+
+/* ── MINIMAP ── */
+#mm{position:fixed;bottom:36px;right:70px;width:120px;height:75px;background:rgba(11,27,58,0.9);border:1px solid var(--border);border-radius:8px;overflow:hidden;z-index:900;}
+#mm-vp{position:absolute;border:1.5px solid var(--accent);border-radius:2px;pointer-events:none;opacity:.7;}
+.mm-dot{position:absolute;border-radius:2px;}
+
+/* ── TOAST ── */
+.toast{position:fixed;bottom:40px;left:50%;transform:translateX(-50%) translateY(50px);background:var(--navy-light);border:1px solid rgba(0,196,160,0.3);border-radius:20px;padding:7px 16px;font-size:11px;color:var(--accent);z-index:3000;transition:transform .3s;pointer-events:none;}
+.toast.show{transform:translateX(-50%) translateY(0);}
+</style>
+</head>
+<body>
+
+<!-- TOOLBAR -->
+<div id="toolbar">
+  <span class="tb-title">Atendimento WhatsApp</span>
+  <div class="tb-sep"></div>
+
+  <!-- Tool modes -->
+  <div class="tool-group">
+    <button class="tool-btn active" id="btn-select" onclick="setMode('select')" data-tip="Selecionar / Arrastar cards (V)">
+      <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 2l10 6-5 1-2 5z"/></svg>
+      Selecionar
+    </button>
+    <button class="tool-btn" id="btn-pan" onclick="setMode('pan')" data-tip="Mover o mapa (H)">
+      <svg viewBox="0 0 20 20" fill="currentColor"><path d="M10 2a1.5 1.5 0 0 1 1.5 1.5V9h1a1.5 1.5 0 0 1 0 3h-1v1.5a1.5 1.5 0 0 1-3 0V12h-1a1.5 1.5 0 0 1 0-3h1V3.5A1.5 1.5 0 0 1 10 2zm-5 7a1.5 1.5 0 0 1 0 3H3.5a1.5 1.5 0 0 1 0-3H5zm10 0h1.5a1.5 1.5 0 0 1 0 3H15a1.5 1.5 0 0 1 0-3z"/></svg>
+      Mover mapa
+    </button>
+    <button class="tool-btn" id="btn-zoom-in" onclick="setMode('zoomin')" data-tip="Zoom + (clique no mapa) (Z)">
+      <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="6.5" cy="6.5" r="4.5"/><line x1="10" y1="10" x2="14" y2="14"/><line x1="6.5" y1="4.5" x2="6.5" y2="8.5"/><line x1="4.5" y1="6.5" x2="8.5" y2="6.5"/></svg>
+      Zoom +
+    </button>
+    <button class="tool-btn" id="btn-zoom-out" onclick="setMode('zoomout')" data-tip="Zoom − (clique no mapa) (X)">
+      <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="6.5" cy="6.5" r="4.5"/><line x1="10" y1="10" x2="14" y2="14"/><line x1="4.5" y1="6.5" x2="8.5" y2="6.5"/></svg>
+      Zoom −
+    </button>
+  </div>
+
+  <div class="tb-sep"></div>
+
+  <!-- Actions -->
+  <button class="tb-btn primary" onclick="openNew()">
+    <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><line x1="8" y1="2" x2="8" y2="14"/><line x1="2" y1="8" x2="14" y2="8"/></svg>
+    Novo card
+  </button>
+
+  <button class="tb-btn" id="btn-conn" onclick="setMode('connect')" data-tip="Clique em dois cards para conectar (C)">
+    <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="3" cy="8" r="2"/><circle cx="13" cy="8" r="2"/><line x1="5" y1="8" x2="11" y2="8"/></svg>
+    Conectar
+  </button>
+
+  <div class="tb-sep"></div>
+
+  <button class="tb-btn" onclick="fitAll()">
+    <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><rect x="2" y="2" width="5" height="5"/><rect x="9" y="2" width="5" height="5"/><rect x="2" y="9" width="5" height="5"/><rect x="9" y="9" width="5" height="5"/></svg>
+    Encaixar
+  </button>
+  <button class="tb-btn" onclick="exportCSV()">
+    <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M2 10v4h12v-4M8 2v8M5 7l3 3 3-3"/></svg>
+    Exportar CSV
+  </button>
+</div>
+
+<!-- BANNER -->
+<div id="banner"></div>
+
+<!-- CANVAS -->
+<div id="wrap">
+  <svg id="svg-l" style="position:absolute;top:0;left:0;pointer-events:none;">
+    <defs>
+      <marker id="ah" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto"><path d="M0,0 L0,6 L8,3 z" fill="rgba(0,196,160,0.55)"/></marker>
+      <marker id="ah-sel" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto"><path d="M0,0 L0,6 L8,3 z" fill="#00C4A0"/></marker>
+    </defs>
+    <g id="conn-layer"></g>
+  </svg>
+  <div id="nodes-l"></div>
+</div>
+
+<!-- MINIMAP -->
+<div id="mm"><div id="mm-vp"></div></div>
+<div id="zoom-badge">100%</div>
+
+<!-- STATUS BAR -->
+<div id="status-bar">
+  <div class="sb-item"><strong id="sb-cards">0</strong> cards</div>
+  <div class="sb-item"><strong id="sb-conns">0</strong> conexões</div>
+  <div class="sb-item sb-mode" id="sb-mode">
+    <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 2l10 6-5 1-2 5z"/></svg>
+    Modo: Selecionar
+  </div>
+</div>
+
+<!-- MODAL -->
+<div id="ov">
+  <div id="modal" onclick="event.stopPropagation()">
+    <div class="mh">
+      <div class="mh-dot" id="m-dot"></div>
+      <div class="mh-title" id="m-title">Departamento</div>
+      <button class="mh-close" onclick="closeModal()">
+        <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="2" y1="2" x2="14" y2="14"/><line x1="14" y1="2" x2="2" y2="14"/></svg>
+      </button>
+    </div>
+    <div class="mb">
+      <div class="fl">Nome do departamento</div>
+      <input class="mi" id="m-name" placeholder="Ex: Recrutamento & Seleção">
+      <div class="fl">Cor do card</div>
+      <div class="cp" id="m-cp"></div>
+      <div class="fl">Número WhatsApp do departamento</div>
+      <input class="mi" id="m-wa" placeholder="(11) 9 0000-0000" type="tel">
+      <div class="fl mu" style="margin-bottom:8px;">Pessoas</div>
+      <div class="pe" id="m-pe"></div>
+      <button class="ap-btn" onclick="addPR()">
+        <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><line x1="8" y1="2" x2="8" y2="14"/><line x1="2" y1="8" x2="14" y2="8"/></svg>
+        Adicionar pessoa
+      </button>
+    </div>
+    <div class="mf">
+      <button class="btn-c" onclick="closeModal()">Cancelar</button>
+      <button class="btn-s" onclick="saveCard()">Salvar</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+// ── CONSTANTS ──
+const COLORS=['#00C4A0','#3B8BD4','#9B59B6','#E67E22','#E74C3C','#25D366','#F1C40F','#EC407A','#607D8B'];
+const AVC=['#00C4A0','#3B8BD4','#9B59B6','#E67E22','#E74C3C','#25D366'];
+const MODE_ICONS={
+  select:'<path d="M3 2l10 6-5 1-2 5z"/>',
+  pan:'<path d="M10 2a1.5 1.5 0 0 1 1.5 1.5V9h1a1.5 1.5 0 0 1 0 3h-1v1.5a1.5 1.5 0 0 1-3 0V12h-1a1.5 1.5 0 0 1 0-3h1V3.5A1.5 1.5 0 0 1 10 2zm-5 7a1.5 1.5 0 0 1 0 3H3.5a1.5 1.5 0 0 1 0-3H5zm10 0h1.5a1.5 1.5 0 0 1 0 3H15a1.5 1.5 0 0 1 0-3z"/>',
+  zoomin:'<circle cx="6.5" cy="6.5" r="4.5"/><line x1="10" y1="10" x2="14" y2="14"/><line x1="6.5" y1="4.5" x2="6.5" y2="8.5"/><line x1="4.5" y1="6.5" x2="8.5" y2="6.5"/>',
+  zoomout:'<circle cx="6.5" cy="6.5" r="4.5"/><line x1="10" y1="10" x2="14" y2="14"/><line x1="4.5" y1="6.5" x2="8.5" y2="6.5"/>',
+  connect:'<circle cx="3" cy="8" r="2"/><circle cx="13" cy="8" r="2"/><line x1="5" y1="8" x2="11" y2="8"/>'
+};
+const MODE_LABELS={select:'Selecionar',pan:'Mover mapa',zoomin:'Zoom +',zoomout:'Zoom −',connect:'Conectar'};
+const MODE_CURSORS={select:'default',pan:'grab',zoomin:'zoom-in',zoomout:'zoom-out',connect:'crosshair'};
+
+// ── STATE ──
+let cards={}, conns=[], seq=0;
+let mode='select';
+let connSrc=null;
+let editId=null, mPeople=[], mColor=COLORS[0];
+let pan={x:160,y:80}, sc=1;
+let isPanning=false, panStart={x:0,y:0};
+let isDragging=false;
+
+const wrap=document.getElementById('wrap');
+const NL=document.getElementById('nodes-l');
+const SL=document.getElementById('svg-l');
+const CL=document.getElementById('conn-layer');
+
+// ── TRANSFORM ──
+function applyT(){
+  const t=`translate(${pan.x}px,${pan.y}px) scale(${sc})`;
+  NL.style.transform=t; SL.style.transform=t;
+  document.getElementById('zoom-badge').textContent=Math.round(sc*100)+'%';
+  updateMM();
+}
+
+// ── MODE ──
+function setMode(m){
+  // deactivate all tool buttons
+  document.querySelectorAll('.tool-btn,[id="btn-conn"]').forEach(b=>b.classList.remove('active'));
+  const btnMap={select:'btn-select',pan:'btn-pan',zoomin:'btn-zoom-in',zoomout:'btn-zoom-out',connect:'btn-conn'};
+  const b=document.getElementById(btnMap[m]);
+  if(b) b.classList.add('active');
+
+  // cleanup connect mode
+  if(mode==='connect' && m!=='connect'){
+    connSrc=null;
+    document.querySelectorAll('.card').forEach(c=>c.classList.remove('conn-src','conn-hover'));
+    hideBanner();
+  }
+  mode=m;
+  document.body.className='mode-'+m;
+  wrap.style.cursor=MODE_CURSORS[m]||'default';
+
+  // update status bar
+  const sbSvg=mode==='pan'?'fill="currentColor" viewBox="0 0 20 20"':'fill="none" viewBox="0 0 16 16" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"';
+  document.getElementById('sb-mode').innerHTML=`<svg ${sbSvg} style="width:11px;height:11px">${MODE_ICONS[m]||''}</svg> Modo: ${MODE_LABELS[m]||m}`;
+
+  if(m==='connect') showBanner('🔗 Clique no card de origem','acc');
+}
+
+// ── BANNER ──
+let bannerTimer=null;
+function showBanner(msg,cls='acc',dur=0){
+  const b=document.getElementById('banner');
+  b.textContent=msg; b.className=cls; b.style.display='block';
+  clearTimeout(bannerTimer);
+  if(dur>0) bannerTimer=setTimeout(hideBanner,dur);
+}
+function hideBanner(){const b=document.getElementById('banner');b.style.display='none';}
+
+// ── CANVAS INTERACTIONS ──
+wrap.addEventListener('mousedown',e=>{
+  // only react if clicking the wrap/svg background (not a card/button)
+  const isBackground=e.target===wrap||e.target===NL||e.target===SL||e.target.tagName==='svg'||e.target.tagName==='g'||e.target.tagName==='SVGSVGElement';
+  if(!isBackground) return;
+
+  if(mode==='pan'){
+    isPanning=true;
+    panStart={x:e.clientX-pan.x,y:e.clientY-pan.y};
+    wrap.style.cursor='grabbing';
+    e.preventDefault();
+  }
+  if(mode==='zoomin'||mode==='zoomout'){
+    const r=wrap.getBoundingClientRect();
+    const mx=e.clientX-r.left, my=e.clientY-r.top;
+    const wx=(mx-pan.x)/sc, wy=(my-pan.y)/sc;
+    const d=mode==='zoomin'?1.25:0.8;
+    sc=Math.min(3,Math.max(0.15,sc*d));
+    pan.x=mx-wx*sc; pan.y=my-wy*sc;
+    applyT();
+  }
+  if(mode==='select'){
+    // deselect all
+    document.querySelectorAll('.card').forEach(c=>c.classList.remove('sel'));
+  }
+});
+
+window.addEventListener('mousemove',e=>{
+  if(isPanning){
+    pan.x=e.clientX-panStart.x; pan.y=e.clientY-panStart.y;
+    applyT();
+  }
+});
+window.addEventListener('mouseup',()=>{
+  isPanning=false;
+  if(mode==='pan') wrap.style.cursor='grab';
+});
+
+// ── CREATE CARD ──
+function mkCard(d){
+  const id='n'+(seq++);
+  cards[id]={id,name:d.name||'Novo Departamento',color:d.color||COLORS[seq%COLORS.length],
+    wa:d.wa||'',people:d.people||[],x:d.x??400,y:d.y??300};
+  renderCard(id);
+  updateSB();
+  return id;
+}
+
+function inits(n){return(n||'?').trim().split(' ').map(w=>w[0]).join('').slice(0,2).toUpperCase()||'??';}
+
+function renderCard(id){
+  const d=cards[id]; if(!d)return;
+  let el=document.getElementById(id);
+  if(!el){el=document.createElement('div');el.className='card';el.id=id;NL.appendChild(el);makeDrag(el,id);}
+
+  const pH=d.people.length
+    ?d.people.map((p,i)=>`
+      <div class="ppl-item">
+        <div class="ppl-av" style="background:${AVC[i%AVC.length]}">${inits(p.name)}</div>
+        <div class="ppl-info">
+          <div class="ppl-name">${p.name||'—'}</div>
+          ${p.role?`<div class="ppl-role">${p.role}</div>`:''}
+          ${p.wa?`<div class="ppl-wa">${p.wa}</div>`:''}
+        </div>
+      </div>`).join('')
+    :'<div class="ppl-empty">Sem pessoas</div>';
+
+  el.innerHTML=`
+    <div class="card-head" style="border-top:3px solid ${d.color}">
+      <div class="c-dot" style="background:${d.color}"></div>
+      <div class="c-name">${d.name}</div>
+      <div class="c-btns">
+        <button class="c-btn" onclick="openEdit('${id}')" title="Editar">
+          <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M11 2l3 3-9 9H2v-3L11 2z"/></svg>
+        </button>
+        <button class="c-btn del" onclick="delCard('${id}')" title="Excluir">
+          <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M2 4h12M5 4V2h6v2M6 7v5M10 7v5M3 4l1 10h8l1-10"/></svg>
+        </button>
+      </div>
+    </div>
+    <div class="card-body">
+      <div class="wa-row">
+        <div class="wa-badge"><svg viewBox="0 0 16 16" fill="currentColor"><path d="M8 1a7 7 0 1 0 3.07 13.27L14 15l-.73-2.93A7 7 0 0 0 8 1zm0 1.5a5.5 5.5 0 1 1-2.4 10.4l-.24-.14-1.86.56.56-1.86-.14-.24A5.5 5.5 0 0 1 8 2.5z"/></svg>WA</div>
+        ${d.wa?`<span class="wa-num">${d.wa}</span>`:`<span class="wa-empty">sem número</span>`}
+      </div>
+      <div class="ppl-list">${pH}</div>
+    </div>
+    <div class="port t" data-id="${id}"></div>
+    <div class="port b" data-id="${id}"></div>
+    <div class="port l" data-id="${id}"></div>
+    <div class="port r" data-id="${id}"></div>`;
+
+  el.style.left=d.x+'px'; el.style.top=d.y+'px';
+
+  // port clicks (connect mode)
+  el.querySelectorAll('.port').forEach(p=>p.addEventListener('mousedown',e=>{e.stopPropagation();if(mode==='connect')handleConn(id);}));
+
+  // card click
+  el.addEventListener('mousedown',e=>{
+    if(e.target.closest('.c-btn')||e.target.classList.contains('port'))return;
+    e.stopPropagation();
+    if(mode==='connect'){handleConn(id);return;}
+    if(mode==='select'){
+      document.querySelectorAll('.card').forEach(c=>c.classList.remove('sel'));
+      el.classList.add('sel');
+    }
+  });
+
+  // hover highlight for connect target
+  el.addEventListener('mouseenter',()=>{if(mode==='connect'&&connSrc&&connSrc!==id)el.classList.add('conn-hover');});
+  el.addEventListener('mouseleave',()=>el.classList.remove('conn-hover'));
+}
+
+// ── DRAG CARDS (only in select mode) ──
+function makeDrag(el,id){
+  let drag=false,smx,smy,scx,scy;
+  el.addEventListener('mousedown',e=>{
+    if(mode!=='select')return;
+    if(e.target.closest('.c-btn')||e.target.classList.contains('port'))return;
+    drag=true;
+    const wr=wrap.getBoundingClientRect();
+    smx=(e.clientX-wr.left-pan.x)/sc;
+    smy=(e.clientY-wr.top-pan.y)/sc;
+    scx=cards[id].x; scy=cards[id].y;
+    el.style.zIndex=100; e.preventDefault();
+  });
+  window.addEventListener('mousemove',e=>{
+    if(!drag)return;
+    const wr=wrap.getBoundingClientRect();
+    const cmx=(e.clientX-wr.left-pan.x)/sc;
+    const cmy=(e.clientY-wr.top-pan.y)/sc;
+    cards[id].x=scx+(cmx-smx);
+    cards[id].y=scy+(cmy-smy);
+    el.style.left=cards[id].x+'px';
+    el.style.top=cards[id].y+'px';
+    drawConns(); updateMM();
+  });
+  window.addEventListener('mouseup',()=>{drag=false;el.style.zIndex='';});
+}
+
+// ── CONNECTIONS ──
+function ctr(id){
+  const d=cards[id],el=document.getElementById(id);
+  return{x:d.x+(el?el.offsetWidth:236)/2,y:d.y+(el?el.offsetHeight:160)/2};
+}
+
+function drawConns(){
+  CL.innerHTML='';
+  // Remove any floating delete buttons
+  document.querySelectorAll('.conn-del-btn').forEach(b=>b.remove());
+
+  conns.forEach((c,i)=>{
+    if(!cards[c.f]||!cards[c.t])return;
+    const a=ctr(c.f),b=ctr(c.t);
+    const mx=(a.x+b.x)/2;
+
+    // Path
+    const path=document.createElementNS('http://www.w3.org/2000/svg','path');
+    path.setAttribute('d',`M${a.x},${a.y} C${mx},${a.y} ${mx},${b.y} ${b.x},${b.y}`);
+    path.setAttribute('fill','none');
+    path.setAttribute('stroke',c.sel?'#00C4A0':'rgba(0,196,160,0.32)');
+    path.setAttribute('stroke-width',c.sel?'2.8':'1.8');
+    path.setAttribute('stroke-dasharray','7 4');
+    path.setAttribute('marker-end',c.sel?'url(#ah-sel)':'url(#ah)');
+    CL.appendChild(path);
+
+    // Invisible hit area
+    const hit=document.createElementNS('http://www.w3.org/2000/svg','path');
+    hit.setAttribute('d',`M${a.x},${a.y} C${mx},${a.y} ${mx},${b.y} ${b.x},${b.y}`);
+    hit.setAttribute('fill','none'); hit.setAttribute('stroke','transparent'); hit.setAttribute('stroke-width','20');
+    hit.style.cursor='pointer'; hit.style.pointerEvents='all';
+    hit.addEventListener('click',e=>{e.stopPropagation();selectConn(i);});
+    CL.appendChild(hit);
+
+    // Delete button at midpoint if selected
+    if(c.sel){
+      // midpoint on the cubic bezier at t=0.5
+      const mx2=a.x + 3*(mx-a.x)*0.5 + 3*(mx-a.x)*0.25 + (b.x-a.x)*0.125;
+      const my2=a.y + 3*(a.y-a.y)*0.5 + 3*(b.y-a.y)*0.25 + (b.y-a.y)*0.125;
+      // simpler: just use visual midpoint
+      const pmx=(a.x+b.x)/2, pmy=(a.y+b.y)/2;
+      // convert canvas coords to screen
+      const sx=pmx*sc+pan.x, sy=pmy*sc+pan.y+52; // +52 for toolbar
+      const btn=document.createElement('button');
+      btn.className='conn-del-btn';
+      btn.title='Apagar conexão';
+      btn.innerHTML='×';
+      btn.style.left=sx+'px'; btn.style.top=sy+'px';
+      btn.style.position='fixed';
+      btn.addEventListener('click',e=>{e.stopPropagation();deleteConn(i);});
+      document.body.appendChild(btn);
+    }
+  });
+
+  SL.style.pointerEvents=conns.length?'all':'none';
+  updateSB();
+}
+
+function selectConn(i){
+  conns.forEach((c,j)=>c.sel=(j===i?!c.sel:false));
+  drawConns();
+  if(conns[i]&&conns[i].sel) showBanner('Linha selecionada — clique em × para apagar','warn',0);
+  else hideBanner();
+}
+
+function deleteConn(i){
+  conns.splice(i,1);
+  document.querySelectorAll('.conn-del-btn').forEach(b=>b.remove());
+  hideBanner();
+  drawConns();
+  toast('✓ Conexão apagada');
+}
+
+// ── CONNECT MODE ──
+function handleConn(id){
+  if(!connSrc){
+    connSrc=id;
+    document.getElementById(id).classList.add('conn-src');
+    showBanner('🔗 Agora clique no card de destino — ESC cancela','acc');
+  }else{
+    if(connSrc!==id){
+      const dup=conns.some(c=>(c.f===connSrc&&c.t===id)||(c.f===id&&c.t===connSrc));
+      if(!dup){
+        conns.push({f:connSrc,t:id,sel:false});
+        drawConns(); toast('✓ Conexão criada');
+      }else toast('Já conectados');
+    }
+    document.querySelectorAll('.card').forEach(c=>c.classList.remove('conn-src','conn-hover'));
+    connSrc=null;
+    setMode('select');
+    hideBanner();
+  }
+}
+
+// ── KEYBOARD ──
+document.addEventListener('keydown',e=>{
+  if(document.activeElement.tagName==='INPUT'||document.activeElement.tagName==='TEXTAREA')return;
+  if(e.key==='Escape'){
+    if(mode==='connect'){setMode('select');}
+    closeModal();
+    conns.forEach(c=>c.sel=false);
+    document.querySelectorAll('.conn-del-btn').forEach(b=>b.remove());
+    drawConns(); hideBanner();
+  }
+  if(e.key==='v'||e.key==='V') setMode('select');
+  if(e.key==='h'||e.key==='H') setMode('pan');
+  if(e.key==='z'||e.key==='Z') setMode('zoomin');
+  if(e.key==='x'||e.key==='X') setMode('zoomout');
+  if(e.key==='c'||e.key==='C') setMode('connect');
+  if(e.key==='Delete'||e.key==='Backspace'){
+    const selIdx=conns.findIndex(c=>c.sel);
+    if(selIdx>-1) deleteConn(selIdx);
+  }
+});
+
+// ── MODAL ──
+function openNew(){
+  editId=null; mPeople=[]; mColor=COLORS[Math.floor(Math.random()*COLORS.length)];
+  document.getElementById('m-name').value='';
+  document.getElementById('m-wa').value='';
+  document.getElementById('m-title').textContent='Novo departamento';
+  renderCP(); renderPE();
+  document.getElementById('ov').classList.add('open');
+  setTimeout(()=>document.getElementById('m-name').focus(),60);
+}
+function openEdit(id){
+  editId=id; const d=cards[id];
+  mColor=d.color; mPeople=d.people.map(p=>({...p}));
+  document.getElementById('m-name').value=d.name;
+  document.getElementById('m-wa').value=d.wa;
+  document.getElementById('m-title').textContent='Editar — '+d.name;
+  renderCP(); renderPE();
+  document.getElementById('ov').classList.add('open');
+}
+function closeModal(){document.getElementById('ov').classList.remove('open');editId=null;}
+document.getElementById('ov').addEventListener('click',e=>{if(e.target===document.getElementById('ov'))closeModal();});
+
+function renderCP(){
+  document.getElementById('m-cp').innerHTML=COLORS.map(c=>`<div class="cs${c===mColor?' on':''}" style="background:${c}" onclick="pickC('${c}')"></div>`).join('');
+  document.getElementById('m-dot').style.background=mColor;
+}
+function pickC(c){mColor=c;renderCP();}
+
+function renderPE(){
+  document.getElementById('m-pe').innerHTML=mPeople.map((p,i)=>`
+    <div class="pr">
+      <input class="mi" placeholder="Nome" value="${p.name||''}" oninput="mPeople[${i}].name=this.value">
+      <input class="mi" placeholder="Cargo" value="${p.role||''}" oninput="mPeople[${i}].role=this.value">
+      <input class="mi" placeholder="WA pessoal" type="tel" value="${p.wa||''}" oninput="mPeople[${i}].wa=this.value">
+      <button class="rp-btn" onclick="remPR(${i})">
+        <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><line x1="2" y1="8" x2="14" y2="8"/></svg>
+      </button>
+    </div>`).join('');
+}
+function addPR(){mPeople.push({name:'',role:'',wa:''});renderPE();const rs=document.querySelectorAll('.pr');if(rs.length)rs[rs.length-1].querySelector('input').focus();}
+function remPR(i){mPeople.splice(i,1);renderPE();}
+
+function saveCard(){
+  const name=document.getElementById('m-name').value.trim()||'Sem nome';
+  const wa=document.getElementById('m-wa').value.trim();
+  const people=mPeople.filter(p=>p.name.trim());
+  if(editId){
+    Object.assign(cards[editId],{name,wa,color:mColor,people});
+    renderCard(editId);
+  }else{
+    const r=wrap.getBoundingClientRect();
+    const x=(r.width/2-pan.x)/sc-118, y=(r.height/2-pan.y)/sc-80;
+    mkCard({name,wa,color:mColor,people,x,y});
+  }
+  drawConns(); updateMM(); closeModal();
+  toast(editId?'✓ Atualizado':'✓ Card criado');
+}
+
+// ── DELETE CARD ──
+function delCard(id){
+  if(!confirm('Remover card e suas conexões?'))return;
+  conns=conns.filter(c=>c.f!==id&&c.t!==id);
+  document.getElementById(id)?.remove();
+  delete cards[id];
+  drawConns(); updateMM(); updateSB();
+  toast('Card removido');
+}
+
+// ── FIT ALL ──
+function fitAll(){
+  const ids=Object.keys(cards); if(!ids.length)return;
+  let x0=Infinity,y0=Infinity,x1=-Infinity,y1=-Infinity;
+  ids.forEach(id=>{
+    const el=document.getElementById(id);
+    const w=el?el.offsetWidth:236, h=el?el.offsetHeight:160;
+    x0=Math.min(x0,cards[id].x); y0=Math.min(y0,cards[id].y);
+    x1=Math.max(x1,cards[id].x+w); y1=Math.max(y1,cards[id].y+h);
+  });
+  const r=wrap.getBoundingClientRect(), pad=60;
+  sc=Math.min((r.width-pad*2)/(x1-x0),(r.height-pad*2)/(y1-y0),1.5);
+  pan.x=pad-x0*sc; pan.y=pad-y0*sc;
+  applyT();
+}
+
+// ── EXPORT CSV ──
+function exportCSV(){
+  let csv='\uFEFFDepartamento,Número WA Depto,Nome,Cargo,WA Pessoal\n';
+  Object.values(cards).forEach(d=>{
+    if(!d.people.length){csv+=`"${d.name}","${d.wa}",,\n`;return;}
+    d.people.forEach(p=>{csv+=`"${d.name}","${d.wa}","${p.name||''}","${p.role||''}","${p.wa||''}"\n`;});
+  });
+  const a=document.createElement('a');
+  a.href=URL.createObjectURL(new Blob([csv],{type:'text/csv;charset=utf-8;'}));
+  a.download='whatsapp-departamentos.csv'; a.click();
+  toast('✓ CSV exportado');
+}
+
+// ── STATUS BAR ──
+function updateSB(){
+  document.getElementById('sb-cards').textContent=Object.keys(cards).length;
+  document.getElementById('sb-conns').textContent=conns.length;
+}
+
+// ── MINIMAP ──
+function updateMM(){
+  const mm=document.getElementById('mm'), vp=document.getElementById('mm-vp');
+  mm.querySelectorAll('.mm-dot').forEach(d=>d.remove());
+  const s=120/6000;
+  Object.values(cards).forEach(d=>{
+    const dot=document.createElement('div');
+    dot.className='mm-dot';
+    dot.style.cssText=`left:${d.x*s}px;top:${d.y*s}px;width:${236*s}px;height:5px;background:${d.color};opacity:.8;`;
+    mm.appendChild(dot);
+  });
+  const r=wrap.getBoundingClientRect();
+  vp.style.left=(-pan.x/sc*s)+'px'; vp.style.top=(-pan.y/sc*s)+'px';
+  vp.style.width=(r.width/sc*s)+'px'; vp.style.height=(r.height/sc*s)+'px';
+}
+
+// ── TOAST ──
+function toast(m){const t=document.getElementById('toast');t.textContent=m;t.classList.add('show');setTimeout(()=>t.classList.remove('show'),2400);}
+
+// ── INIT DATA ──
+const initData=[
+  {name:'CEO — Cristina',color:'#00C4A0',wa:'',people:[{name:'Cristina',role:'CEO',wa:''}],x:760,y:60},
+  {name:'Gerente ADM — Camila',color:'#3B8BD4',wa:'',people:[{name:'Camila',role:'Gerente ADM',wa:''}],x:760,y:240},
+  {name:'Consultora Rita',color:'#F1C40F',wa:'',people:[{name:'Rita',role:'Consultora',wa:''}],x:1100,y:150},
+  {name:'Americana',color:'#9B59B6',wa:'',people:[
+    {name:'Heloísa',role:'Gest. Comercial',wa:''},
+    {name:'Simone',role:'Coord. Seleção',wa:''},
+    {name:'Lurdes',role:'Facilities',wa:''},
+    {name:'Thalita',role:'Coord. DP',wa:''},
+    {name:'Matheus',role:'Coorp.',wa:''},
+  ],x:230,y:440},
+  {name:'Campinas',color:'#E67E22',wa:'',people:[{name:'Sarah',role:'Gestora da unidade',wa:''}],x:570,y:440},
+  {name:'Piracicaba',color:'#E74C3C',wa:'',people:[{name:'Patrícia',role:'Gestora da unidade',wa:''}],x:870,y:440},
+  {name:'Jundiaí',color:'#25D366',wa:'',people:[{name:'Daiane',role:'Gestora da unidade',wa:''}],x:1160,y:440},
+];
+
+const ids=initData.map(d=>mkCard(d));
+[[0,1],[1,3],[1,4],[1,5],[1,6],[0,2]].forEach(([a,b])=>conns.push({f:ids[a],t:ids[b],sel:false}));
+drawConns(); applyT();
+setTimeout(()=>{fitAll();updateMM();},150);
+</script>
+</body>
+</html>
